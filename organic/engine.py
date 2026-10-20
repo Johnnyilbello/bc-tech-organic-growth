@@ -889,7 +889,7 @@ def run(root=ROOT, graph=None, *, allow_publishing=True):
             # Keep previous snapshots immutable when the metric contract changes.
             contract = {name: cfg.get(name) for name in (
                 'graph_version','page_id','ig_id','account_metrics',
-                'account_metric_options','post_metrics','competitor_instagram_usernames')}
+                'account_metric_options','post_metrics','competitor_instagram_usernames','runtime_backend')}
             key = 'daily:' + day + ':' + digest(contract)[:16]
             previous = store.db.execute('SELECT data FROM observations WHERE key=?', (key,)).fetchone()
             if previous:
