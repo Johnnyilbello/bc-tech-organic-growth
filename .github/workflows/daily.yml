@@ -1,0 +1,47 @@
+name: BC organic daily
+on:
+  schedule:
+    - cron: '10 13,15,19 * * *'
+      timezone: Europe/Rome
+  workflow_dispatch:
+    inputs:
+      read_only:
+        description: Verifica senza pubblicare
+        type: boolean
+        default: true
+concurrency:
+  group: bc-organic-runtime
+  cancel-in-progress: false
+permissions:
+  contents: write
+jobs:
+  operate:
+    # Both variables remain unset until zero-spend protection and scoped secret
+    # storage have been reviewed and explicitly activated.
+    if: vars.BC_CLOUD_ENABLED == 'true' && vars.BC_ZERO_SPEND_VERIFIED == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.11'
+      - name: Execute with durable state
+        working-directory: organic
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          BC_META_PAGE_TOKEN: ${{ secrets.BC_META_PAGE_TOKEN }}
+          BC_STATE_KEY: ${{ secrets.BC_STATE_KEY }}
+          BC_PUBLIC_RUNNER_APPROVED: ${{ vars.BC_PUBLIC_RUNNER_APPROVED }}
+          BC_CLOUD_ENABLED: ${{ vars.BC_CLOUD_ENABLED }}
+          BC_ZERO_SPEND_VERIFIED: ${{ vars.BC_ZERO_SPEND_VERIFIED }}
+          READ_ONLY: ${{ vars.BC_CLOUD_PUBLISHING_ENABLED != 'true' || (github.event_name == 'workflow_dispatch' && inputs.read_only) }}
+        run: |
+          python -m pip install --disable-pip-version-check cryptography==50.0.2
+          if [ "$READ_ONLY" = "true" ]; then
+            python cloud_runtime.py --read-only
+          else
+            python cloud_runtime.py
+          fi

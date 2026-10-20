@@ -1,0 +1,8 @@
+runtime/
+**/runtime/
+**/__pycache__/
+private/
+.env*
+*.dpapi
+*.pem
+*.sqlite*
