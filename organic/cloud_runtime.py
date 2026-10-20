@@ -100,6 +100,8 @@ class GitHubState:
             raise DurabilityError('Privacy del repository non verificabile') from None
         if info.get('full_name')!=self.repo:
             raise DurabilityError('Repository diverso dalla destinazione autorizzata')
+        if public_approved and info.get('private') is not False:
+            raise DurabilityError('Repository non più pubblico: gratuità del runner non confermata')
         if info.get('private') is not True and not (public_approved and self.state_key is not None):
             raise DurabilityError('Runner pubblico richiede consenso esplicito e stato cifrato')
 

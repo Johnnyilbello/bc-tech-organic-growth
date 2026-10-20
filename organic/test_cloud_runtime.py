@@ -42,6 +42,8 @@ class CloudTests(unittest.TestCase):
         with self.assertRaises(DurabilityError):state.assert_repository(public_approved=False)
         response.__enter__.return_value=io.BytesIO(b'{"full_name":"owner/public","private":false}')
         state.assert_repository(public_approved=True)
+        response.__enter__.return_value=io.BytesIO(b'{"full_name":"owner/public","private":true}')
+        with self.assertRaises(DurabilityError):state.assert_repository(public_approved=True)
 
     def test_read_only_cycle_preserves_ready_job(self):
         from test_engine import config,post,FakeGraph

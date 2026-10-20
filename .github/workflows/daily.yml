@@ -18,7 +18,7 @@ jobs:
   operate:
     # Both variables remain unset until zero-spend protection and scoped secret
     # storage have been reviewed and explicitly activated.
-    if: vars.BC_CLOUD_ENABLED == 'true' && vars.BC_ZERO_SPEND_VERIFIED == 'true'
+    if: github.event.repository.private == false && vars.BC_CLOUD_ENABLED == 'true' && vars.BC_ZERO_SPEND_VERIFIED == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

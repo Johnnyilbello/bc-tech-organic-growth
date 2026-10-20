@@ -844,7 +844,9 @@ def report(store, cfg, snapshot, status):
         'Instagram: coda Business Suite non enumerata da questo adattatore. Blocca nuove uscite se la coda non è stata verificata. Nessuna lettura inbox, DM o account personali.',
         'Competitor: solo contenuti pubblici o Business Discovery autorizzato; insight e vendite dei concorrenti restano non accessibili.',
         'Il primo collegamento deve collaudare permessi, versione Graph, media pubblici e una pubblicazione reale verificata. I test simulati non sostituiscono il collaudo live.',
-        'Esecuzione locale: PC acceso e Codex aperto alle scadenze. Nessun hosting continuo è stato attivato.', '']
+        ('Esecuzione cloud GitHub Actions: letture e report indipendenti dal PC; publisher cloud disabilitato durante il collaudo.'
+         if cfg.get('runtime_backend')=='github_actions' and cfg.get('cloud_read_only') else
+         'Esecuzione locale: PC acceso e Codex aperto alle scadenze. Lo stato cloud è verificato separatamente; non eseguire due publisher.'), '']
     frequency=read_json(store.root/'frequency-decision.json')
     if frequency:
         lines += ['## Frequenza editoriale', '', frequency['decision'],
