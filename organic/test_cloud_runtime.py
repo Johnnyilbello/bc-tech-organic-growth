@@ -30,6 +30,19 @@ class MemoryGitHub:
 
 
 class CloudTests(unittest.TestCase):
+    def test_public_repository_requires_both_consent_and_encryption(self):
+        import io
+        response=Mock();response.__enter__=Mock(return_value=io.BytesIO(b'{"full_name":"owner/public","private":false}'))
+        response.__exit__=Mock(return_value=False)
+        opener=Mock();opener.open.return_value=response
+        state=GitHubState('owner/public','synthetic',self.root,opener=opener)
+        with self.assertRaises(DurabilityError):state.assert_repository(public_approved=True)
+        state.state_key=bytes(range(32))
+        response.__enter__.return_value=io.BytesIO(b'{"full_name":"owner/public","private":false}')
+        with self.assertRaises(DurabilityError):state.assert_repository(public_approved=False)
+        response.__enter__.return_value=io.BytesIO(b'{"full_name":"owner/public","private":false}')
+        state.assert_repository(public_approved=True)
+
     def test_read_only_cycle_preserves_ready_job(self):
         from test_engine import config,post,FakeGraph
         cfg=dict(config(),publishing_enabled=True)

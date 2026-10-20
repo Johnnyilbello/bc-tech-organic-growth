@@ -1,6 +1,6 @@
 # Organic growth runner
 
-Generic Meta Graph API operations with an authenticated encrypted state. This proposal is not deployed or active.
+Generic Meta Graph API operations with an authenticated encrypted state. The source is published. The daily production runner is not activated; its first live read-only test is still pending. A separate verification workflow tests synthetic data without Meta secrets.
 
 Public source includes the engine, a planner without its private topic catalog, tests, the workflow and this document. Account configuration, calendar, captions, metrics, reports and operation receipts are restored only from AES-256-GCM encrypted state. No token, private catalog or operational database belongs in source control.
 

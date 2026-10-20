@@ -1,6 +1,6 @@
 """Cloud execution with a durable write barrier; credentials stay in secrets.
 
-GitHub Actions concurrency is supplemented by a CAS lease in a private repo.
+GitHub Actions concurrency is supplemented by a CAS lease in encrypted state.
 Before *every* Meta mutation the SQLite intent must be acknowledged remotely.
 An unknown HTTP outcome is never retried as a new publication.
 """
@@ -246,7 +246,7 @@ def main():
         if summary and report.exists():
             body='BC Organic: '+result+'\n\nReport operativo conservato nello stato cifrato. Nessuna metrica o calendario privato nei log pubblici.' if public_approved else report.read_text(encoding='utf8')
             Path(summary).write_text(body,encoding='utf8')
-        return 2 if result.startswith('blocked') else 0
+        return 2 if result.startswith('blocked') or result=='partial' else 0
     except Exception:
         # If final persistence cannot be acknowledged, retain the remote intent
         # and lease. The next run cannot silently retry an ambiguous operation.

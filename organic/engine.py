@@ -815,7 +815,10 @@ def report(store, cfg, snapshot, status):
             source=next((p for p in snapshot[entry['platform']+'_published'].get('data') or [] if p['id']==entry['post_id']),{})
             url=source.get('permalink',source.get('permalink_url'))
             label=f'[{entry["post_id"]}]({url})' if url else entry['post_id']
-            lines.append(f'| {label} | {entry.get("published_at")} | {entry["metric"]} | {value if value is not None else "non rilevato"} | {entry["captured_at"]} |')
+            readable = ('nessuna voce restituita; totale non rilevato' if value == {} else
+                json.dumps(value,ensure_ascii=False) if isinstance(value,(dict,list)) else
+                value if value is not None else 'non rilevato')
+            lines.append(f'| {label} | {entry.get("published_at")} | {entry["metric"]} | {readable} | {entry["captured_at"]} |')
     else:
         lines.append('Nessuna lettura Meta aggiornata: credenziali/app non configurate o ciclo fallito. Statistiche e coda nativa = non rilevate.')
         if records:
@@ -883,7 +886,11 @@ def run(root=ROOT, graph=None, *, allow_publishing=True):
         if graph:
             reconcile_scheduled(store,graph)
             reconcile_external_scheduled(store,graph,cfg)
-            key = 'daily:' + day
+            # Keep previous snapshots immutable when the metric contract changes.
+            contract = {name: cfg.get(name) for name in (
+                'graph_version','page_id','ig_id','account_metrics',
+                'account_metric_options','post_metrics','competitor_instagram_usernames')}
+            key = 'daily:' + day + ':' + digest(contract)[:16]
             previous = store.db.execute('SELECT data FROM observations WHERE key=?', (key,)).fetchone()
             if previous:
                 snapshot = json.loads(previous['data'])

@@ -41,6 +41,19 @@ class FakeGraph:
 
 
 class EngineTests(unittest.TestCase):
+    def test_changed_metric_contract_refreshes_without_overwriting_old_snapshot(self):
+        cfg=config();e.write_json(self.root/'config.json',cfg)
+        graph=FakeGraph()
+        with patch.object(e,'collect',wraps=e.collect) as collect:
+            e.run(self.root,graph=graph,allow_publishing=False)
+            e.run(self.root,graph=graph,allow_publishing=False)
+            self.assertEqual(collect.call_count,1)
+            cfg['post_metrics']={'facebook':['post_media_view']}
+            e.write_json(self.root/'config.json',cfg)
+            e.run(self.root,graph=graph,allow_publishing=False)
+            self.assertEqual(collect.call_count,2)
+        self.assertEqual(self.store.db.execute("SELECT count(*) FROM observations WHERE key LIKE 'daily:%'").fetchone()[0],2)
+
     def test_fresh_instagram_proof_does_not_refresh_old_facebook_proof(self):
         cfg=dict(config(),facebook_scheduled_api_incomplete=True)
         proof={'verified_at':e.stamp(),'page_id':'10','ig_id':'20','platforms':{
