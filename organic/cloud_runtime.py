@@ -26,7 +26,7 @@ class DurabilityError(RuntimeError):
 
 
 class GitHubState:
-    FILES=('config.json','topic-catalog.json','frequency-decision.json','evidence/native-queue-reconciliation.json',
+    FILES=('config.json','topic-catalog.json','frequency-decision.json','editorial-analysis.json','evidence/native-queue-reconciliation.json',
         'evidence/meta-api-connection.json','evidence/access-state.json','evidence/legacy-monitoraggio.json')
 
     def __init__(self, repo, token, root, *, run_id=None, branch='organic-state', opener=None, state_key=None):

@@ -883,6 +883,17 @@ def report(store, cfg, snapshot, status):
          if cfg.get('runtime_backend')=='github_actions' and cfg.get('cloud_read_only') else
          'Esecuzione locale: PC acceso e Codex aperto alle scadenze. Lo stato cloud è verificato separatamente; non eseguire due publisher.'), '']
     frequency=read_json(store.root/'frequency-decision.json')
+    analysis=read_json(store.root/'editorial-analysis.json')
+    if analysis:
+        lines += ['## Analisi editoriale automatica', '',
+            f'Rilevata {analysis["generated_at"]}: {len(analysis["own_recent"])} post recenti; '
+            f'{len(analysis["comparable_cohorts"])} confronti di almeno tre post alla stessa età (ritardo massimo 60 minuti).',
+            analysis['visual_analysis'], '']
+        for competitor in analysis['competitors']:
+            lines.append('- @'+competitor['username']+': '+competitor['status']+'; campione '+str(competitor['sample_count'])+
+                ', contenuti negli ultimi 30 giorni '+str(competitor['recent_sample_count'])+
+                '. Ultima data restituita: '+str(competitor['newest_published_at'])+'. '+competitor['limit'])
+        lines += ['', 'Esperimento: '+analysis['experiment']['change'],analysis['experiment']['guard'],'']
     if frequency:
         lines += ['## Frequenza editoriale', '', frequency['decision'],
                   'Valutazione: '+frequency['evaluated_at']+'. '+frequency['reason'],
@@ -981,6 +992,9 @@ def run(root=ROOT, graph=None, *, allow_publishing=True):
         else:
             if store.observe('alert:missing_meta', {'reason':'App/token Meta non configurati','at':stamp()}):
                 store.event('access_blocked', reason='App/token Meta non configurati; nessun dato inventato')
+        if snapshot:
+            from editorial import analyze
+            analyze(store,cfg,snapshot)
         store.export()
         result = report(store, cfg, snapshot, status)
         print(json.dumps({'status': status, 'report': str(result)}, ensure_ascii=True))
