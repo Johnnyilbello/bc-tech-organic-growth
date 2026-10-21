@@ -21,4 +21,4 @@ jobs:
         working-directory: organic
         run: |
           python -m pip install --disable-pip-version-check cryptography==50.0.2
-          python -m unittest -v test_engine test_cloud_runtime
+          python -m unittest -v test_engine test_cloud_runtime test_cloud_notify

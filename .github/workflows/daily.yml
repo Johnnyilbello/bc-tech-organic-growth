@@ -13,11 +13,16 @@ on:
         description: Verifica media Meta senza pubblicare
         type: boolean
         default: false
+      notification_test:
+        description: Collaudo notifica tecnica al titolare
+        type: boolean
+        default: false
 concurrency:
   group: bc-organic-runtime
   cancel-in-progress: false
 permissions:
   contents: write
+  issues: write
 jobs:
   operate:
     # Both variables remain unset until zero-spend protection and scoped secret
@@ -41,7 +46,7 @@ jobs:
           BC_PUBLIC_RUNNER_APPROVED: ${{ vars.BC_PUBLIC_RUNNER_APPROVED }}
           BC_CLOUD_ENABLED: ${{ vars.BC_CLOUD_ENABLED }}
           BC_ZERO_SPEND_VERIFIED: ${{ vars.BC_ZERO_SPEND_VERIFIED }}
-          READ_ONLY: ${{ vars.BC_CLOUD_PUBLISHING_ENABLED != 'true' || (github.event_name == 'workflow_dispatch' && inputs.read_only) }}
+          READ_ONLY: ${{ vars.BC_CLOUD_PUBLISHING_ENABLED != 'true' || (github.event_name == 'workflow_dispatch' && (inputs.read_only || inputs.notification_test)) }}
           MEDIA_PREFLIGHT: ${{ github.event_name == 'workflow_dispatch' && inputs.media_preflight }}
         run: |
           python -m pip install --disable-pip-version-check cryptography==50.0.2
@@ -49,3 +54,14 @@ jobs:
           if [ "$READ_ONLY" = "true" ]; then args+=(--read-only); fi
           if [ "$MEDIA_PREFLIGHT" = "true" ]; then args+=(--media-preflight); fi
           python cloud_runtime.py "${args[@]}"
+      - name: Notify owner on failure or recovery
+        if: always()
+        working-directory: organic
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RUN_OUTCOME: ${{ job.status }}
+          NOTIFICATION_TEST: ${{ github.event_name == 'workflow_dispatch' && inputs.notification_test }}
+        run: |
+          args=(--outcome "$RUN_OUTCOME")
+          if [ "$NOTIFICATION_TEST" = "true" ]; then args+=(--test); fi
+          python cloud_notify.py "${args[@]}"
