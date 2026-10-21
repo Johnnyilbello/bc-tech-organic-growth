@@ -9,7 +9,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 import engine as e
-from cloud_runtime import GitHubState, DurableGraph, DurabilityError, seed_document
+from cloud_runtime import GitHubState, DurableGraph, DurabilityError, seed_document, preflight_registered_photos
 
 
 class MemoryGitHub:
@@ -30,6 +30,19 @@ class MemoryGitHub:
 
 
 class CloudTests(unittest.TestCase):
+    def test_media_preflight_is_read_only_and_preserves_jobs(self):
+        cfg={'page_id':'10','meta_photo_staging_enabled':True,'meta_photo_assets':{
+            'photo':{'page_id':'10','visual_checked':True,'sha256':'a'*64}}}
+        graph=DurableGraph('v26.0','synthetic',Mock(),read_only=True)
+        with patch.object(e,'verify_media',return_value=[]) as verify:
+            self.assertEqual(preflight_registered_photos(graph,cfg,self.root),[{'photo_id':'photo','sha256':'a'*64}])
+            self.assertIs(verify.call_args.kwargs['graph'],graph)
+            preflight_registered_photos(graph,cfg,self.root)
+        store=e.Store(self.root)
+        self.assertEqual(store.rows(),[])
+        self.assertEqual(store.db.execute("SELECT count(*) FROM events WHERE kind='meta_media_preflight_verified'").fetchone()[0],1)
+        store.db.close()
+
     def test_public_repository_requires_both_consent_and_encryption(self):
         import io
         response=Mock();response.__enter__=Mock(return_value=io.BytesIO(b'{"full_name":"owner/public","private":false}'))

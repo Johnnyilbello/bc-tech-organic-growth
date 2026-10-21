@@ -41,6 +41,34 @@ class FakeGraph:
 
 
 class EngineTests(unittest.TestCase):
+    def test_meta_photo_resolves_fresh_url_and_preserves_original_job(self):
+        import hashlib
+        data=b'\xff\xd8\xffJPEG-SYNTHETIC';sha=hashlib.sha256(data).hexdigest()
+        cfg=config();cfg.update(meta_photo_staging_enabled=True,meta_photo_assets={
+            'photo':{'page_id':'10','sha256':sha,'visual_checked':True,'dimensions':[1080,1350]}})
+        p=dict(post(),platform='instagram',asset_hashes=[sha],media=[{'type':'IMAGE','meta_photo_id':'photo','sha256':sha}])
+        p['approval_hash']=e.fingerprint(p);e.ready(p,cfg)
+        graph=Mock();graph.get.return_value={'from':{'id':'10'},'images':[
+            {'width':1080,'height':1350,'source':'https://scontent.example.fbcdn.net/media.jpg?fresh=1'}]}
+        response=Mock();response.__enter__=Mock(return_value=io.BytesIO(data));response.__exit__=Mock(return_value=False)
+        opener=Mock();opener.open.return_value=response
+        with patch.object(e,'build_opener',return_value=opener):
+            resolved=e.verify_media(p,cfg,self.root,graph=graph)
+        self.assertIn('fresh=1',resolved[0]['url'])
+        self.assertNotIn('url',p['media'][0])
+        graph.get.return_value['from']['id']='other'
+        with self.assertRaises(ValueError):e.verify_media(p,cfg,self.root,graph=graph)
+
+    def test_meta_photo_rejects_unregistered_and_untrusted_media(self):
+        p=dict(post(),platform='instagram',asset_hashes=['a'*64],media=[{'type':'IMAGE','meta_photo_id':'photo','sha256':'a'*64}])
+        p['approval_hash']=e.fingerprint(p)
+        with self.assertRaises(ValueError):e.ready(p,config())
+        cfg=dict(config(),meta_photo_staging_enabled=True,meta_photo_assets={
+            'photo':{'page_id':'10','sha256':'a'*64,'visual_checked':True,'dimensions':[1080,1350]}})
+        graph=Mock();graph.get.return_value={'from':{'id':'10'},'images':[
+            {'width':1080,'height':1350,'source':'https://fbcdn.net.attacker.test/media.jpg'}]}
+        with self.assertRaises(ValueError):e.verify_media(p,cfg,self.root,graph=graph)
+
     def test_changed_metric_contract_refreshes_without_overwriting_old_snapshot(self):
         cfg=config();e.write_json(self.root/'config.json',cfg)
         graph=FakeGraph()
@@ -357,7 +385,7 @@ class EngineTests(unittest.TestCase):
                 if path=='container':return {'status_code':'FINISHED'}
                 return {'id':'published1','permalink':'https://www.instagram.com/p/test','timestamp':e.stamp()}
         graph=Instagram()
-        with patch.object(e,'verify_media'):
+        with patch.object(e,'verify_media',return_value=p['media']):
             e.publish_one(self.store,graph,config(),self.store.rows()[0])
         self.assertEqual(self.store.rows()[0]['status'],'published')
         self.assertEqual([c[0] for c in graph.calls],['20/media','20/media_publish'])

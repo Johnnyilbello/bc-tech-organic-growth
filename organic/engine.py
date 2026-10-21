@@ -542,20 +542,31 @@ def ready(post, cfg):
         if not media or len(media) > 10:
             raise ValueError('Servono 1–10 media per il formato implementato')
         for asset in media:
-            parsed = urlparse(asset['url'])
-            if parsed.scheme != 'https' or parsed.hostname not in cfg.get('media_hosts', []):
-                raise ValueError('Media HTTPS su host autorizzato richiesto')
+            if asset.get('meta_photo_id'):
+                registered=cfg.get('meta_photo_assets',{}).get(asset['meta_photo_id'],{})
+                if (not cfg.get('meta_photo_staging_enabled') or asset.get('type')!='IMAGE'
+                    or registered.get('page_id')!=cfg['page_id']
+                    or registered.get('sha256')!=asset.get('sha256')
+                    or registered.get('visual_checked') is not True):
+                    raise ValueError('Foto Meta non registrata o priva di QA e hash verificati')
+                if not {'pages_read_engagement','pages_manage_posts'} <= set(cfg.get('granted_permissions',[])):
+                    raise ValueError('Permessi Pagina necessari per i media Meta')
+            else:
+                parsed = urlparse(asset.get('url',''))
+                if parsed.scheme != 'https' or parsed.hostname not in cfg.get('media_hosts', []):
+                    raise ValueError('Media HTTPS su host autorizzato richiesto')
             if asset.get('type') not in ('IMAGE', 'REELS', 'STORIES'):
                 raise ValueError('Formato non implementato')
             if asset.get('type')=='STORIES':
                 raise ValueError('Stories mantenute in bozza fino al collaudo del relativo adattatore')
             if not asset.get('sha256') or asset['sha256'] not in post.get('asset_hashes', []):
                 raise ValueError('Hash media non associato al contenuto')
-            if asset['type'] == 'IMAGE' and not parsed.path.lower().endswith(('.jpg', '.jpeg')):
+            if asset['type'] == 'IMAGE' and not asset.get('meta_photo_id') and not parsed.path.lower().endswith(('.jpg', '.jpeg')):
                 raise ValueError('Le immagini Instagram devono essere JPEG')
 
 
-def verify_media(post, cfg, root=ROOT):
+def verify_media(post, cfg, root=ROOT, *, graph=None):
+    resolved=[]
     for asset in post.get('media', []):
         if post['platform']=='facebook' and asset.get('local_path'):
             path=(Path(root)/asset['local_path']).resolve()
@@ -564,7 +575,27 @@ def verify_media(post, cfg, root=ROOT):
             data=path.read_bytes()
             if len(data)>20*1024*1024 or hashlib.sha256(data).hexdigest()!=asset['sha256']:
                 raise ValueError('Immagine Facebook modificata o troppo grande')
+            resolved.append(dict(asset))
             continue
+        asset=dict(asset)
+        if asset.get('meta_photo_id'):
+            if graph is None:
+                secret=credentials(root)
+                if not secret:raise ValueError('Credenziale Pagina necessaria per risolvere i media Meta')
+                check_credential_dates(secret)
+                graph=Graph(cfg['graph_version'],secret['page_token'])
+            photo=graph.get(asset['meta_photo_id'],fields='id,from,images')
+            if photo.get('from',{}).get('id')!=cfg['page_id'] or not photo.get('images'):
+                raise ValueError('Foto non appartenente alla Pagina BC autorizzata')
+            image=max(photo['images'],key=lambda x:x['width']*x['height'])
+            url=urlparse(image['source'])
+            if (url.scheme!='https' or not url.hostname or not url.hostname.endswith('.fbcdn.net')
+                or url.username or url.password or url.port not in (None,443)):
+                raise ValueError('Origine media restituita da Meta non consentita')
+            registered=cfg['meta_photo_assets'][asset['meta_photo_id']]
+            if [image['width'],image['height']]!=registered.get('dimensions'):
+                raise ValueError('Dimensioni del media Meta cambiate dopo la QA')
+            asset['url']=image['source']
         # Hash the bytes Meta will fetch, not just a local filename.
         req = Request(asset['url'], headers={'User-Agent':'BCOrganic/1.0'})
         try:
@@ -574,6 +605,10 @@ def verify_media(post, cfg, root=ROOT):
             raise ValueError('Media pubblico non recuperabile senza login') from None
         if len(data)>20*1024*1024 or hashlib.sha256(data).hexdigest()!=asset['sha256']:
             raise ValueError('Hash media pubblico diverso dalla versione verificata, o dimensione non supportata')
+        if asset.get('meta_photo_id') and not data.startswith(b'\xff\xd8\xff'):
+            raise ValueError('Media Meta non JPEG')
+        resolved.append(asset)
+    return resolved
 
 
 def stage(store, cfg, post):
@@ -608,7 +643,7 @@ def container_finished(graph, container):
 def publish_one(store, graph, cfg, row):
     post = json.loads(row['payload'])
     ready(post, cfg)
-    verify_media(post, cfg, store.root)
+    verified_media=verify_media(post, cfg, store.root, graph=graph)
     if not store.claim(post['id']):
         return
     try:
@@ -637,7 +672,7 @@ def publish_one(store, graph, cfg, row):
                 store.event('native_schedule_verified', post['id'], proof=proof)
                 return
         else:
-            media = post['media']
+            media = verified_media
             children = []
             for asset in media:
                 params = {'alt_text': asset.get('alt',post.get('alt', ''))} if asset['type'] == 'IMAGE' else {}

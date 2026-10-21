@@ -214,10 +214,32 @@ def seed_document(repo, database):
         'phase':'seeded','updated_at':engine.stamp()}
 
 
+def preflight_registered_photos(graph,cfg,root):
+    assets=cfg.get('meta_photo_assets',{})
+    if not cfg.get('meta_photo_staging_enabled') or not assets:
+        raise ValueError('Nessun media Meta collaudato e registrato')
+    verified=[]
+    for photo_id,entry in list(assets.items())[:10]:
+        if entry.get('visual_checked') is not True or entry.get('page_id')!=cfg['page_id']:
+            raise ValueError('QA o proprietario media Meta non verificati')
+        engine.verify_media({'platform':'instagram','media':[{
+            'type':'IMAGE','meta_photo_id':photo_id,'sha256':entry['sha256']}]},cfg,root,graph=graph)
+        verified.append({'photo_id':photo_id,'sha256':entry['sha256']})
+    store=engine.Store(root)
+    try:
+        key='meta-media-preflight:'+engine.now().astimezone(engine.ROME).date().isoformat()+':'+engine.digest(verified)
+        if store.observe(key,{'verified':verified,'at':engine.stamp()}):
+            store.event('meta_media_preflight_verified',reason=str(len(verified))+' media Meta: proprietario, JPEG e hash verificati in sola lettura')
+    finally:
+        store.db.close()
+    return verified
+
+
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('--root',type=Path,default=engine.ROOT)
     parser.add_argument('--read-only',action='store_true')
+    parser.add_argument('--media-preflight',action='store_true')
     args=parser.parse_args()
     root=args.root.resolve()
     cfg=engine.read_json(root/'config.json')
@@ -241,6 +263,8 @@ def main():
         if identity.get('id')!=cfg['page_id'] or identity.get('name')!=cfg['page_name'] or identity.get('instagram_business_account',{}).get('id')!=cfg['ig_id']:
             raise ValueError('Identità cloud Meta non corrispondente agli asset BC autorizzati')
         engine.check_credential_dates(cfg.get('cloud_credentials_metadata',{}))
+        if args.media_preflight:
+            preflight_registered_photos(graph,cfg,root)
         result=engine.run(root,graph=graph,allow_publishing=not args.read_only)
         state.checkpoint('complete',release=True)
         summary=os.environ.get('GITHUB_STEP_SUMMARY')
